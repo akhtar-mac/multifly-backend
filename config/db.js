@@ -7,13 +7,13 @@ const connectDB = async () => {
       return;
     }
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 30000,
     });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
+    return conn;
   } catch (error) {
     console.error(`MongoDB Error: ${error.message}`);
-    // Don't exit in serverless — let the function return an error response
     throw error;
   }
 };
