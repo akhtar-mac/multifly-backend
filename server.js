@@ -18,7 +18,7 @@ app.get("/api/health", (req, res) => {
 
 // Start server FIRST, then connect DB
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log("Multifly API running on port", PORT);
   
   // Connect to MongoDB in background — don't block server start
