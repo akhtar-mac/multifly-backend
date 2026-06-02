@@ -11,7 +11,24 @@ app.get("/api/health", (req, res) => {
 
 // Root
 app.get("/", (req, res) => {
-  res.json({ message: "Multifly API is running!" });
+  res.json({ message: "Multifly API v2.0 - routes loaded!" });
+});
+
+// Debug: list all routes
+app.get("/api/debug/routes", (req, res) => {
+  const routes = [];
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      routes.push({ path: middleware.route.path, methods: Object.keys(middleware.route.methods) });
+    } else if (middleware.name === "router") {
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          routes.push({ path: handler.route.path, methods: Object.keys(handler.route.methods) });
+        }
+      });
+    }
+  });
+  res.json({ routeCount: routes.length, routes });
 });
 
 // Load routes IMMEDIATELY (they just won't work without DB until DB connects)
