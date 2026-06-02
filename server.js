@@ -9,57 +9,60 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Health check — always works, even without DB
 app.get("/api/health", (req, res) => {
   const dbState = mongoose.connection.readyState;
   const states = { 0: "disconnected", 1: "connected", 2: "connecting", 3: "disconnecting" };
   res.json({ status: "ok", name: "Multifly API", db: states[dbState] || "unknown", time: new Date().toISOString() });
 });
 
-// Connect DB in background then load routes
-const startServer = async () => {
-  try {
-    // Connect MongoDB
-    if (process.env.MONGODB_URI) {
-      const conn = await mongoose.connect(process.env.MONGODB_URI, {
-        serverSelectionTimeoutMS: 10000,
-        socketTimeoutMS: 10000,
-      });
+// Start server FIRST, then connect DB
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log("Multifly API running on port", PORT);
+  
+  // Connect to MongoDB in background — don't block server start
+  if (process.env.MONGODB_URI) {
+    console.log("Connecting to MongoDB...");
+    mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 30000,
+    }).then(async (conn) => {
       console.log("MongoDB connected:", conn.connection.host);
-
-      // Seed data
+      
+      // Load routes AFTER DB is connected
       try {
-        const seedData = require("./utils/seedData");
-        await seedData();
+        app.use("/api/auth", require("./routes/auth"));
+        app.use("/api/packages", require("./routes/packages"));
+        app.use("/api/bookings", require("./routes/bookings"));
+        app.use("/api/inquiries", require("./routes/inquiries"));
+        app.use("/api/careers", require("./routes/careers"));
+        app.use("/api/testimonials", require("./routes/testimonials"));
+        app.use("/api/blog", require("./routes/blog"));
+        app.use("/api/gallery", require("./routes/gallery"));
+        app.use("/api/users", require("./routes/users"));
+        
+        app.use((req, res) => res.status(404).json({ message: "Route not found" }));
+        app.use((err, req, res, next) => { console.error(err); res.status(500).json({ message: err.message }); });
+        
+        console.log("All routes loaded");
+        
+        // Seed data
+        try {
+          await require("./utils/seedData")();
+          console.log("Seed data loaded");
+        } catch (e) {
+          console.error("Seed error:", e.message);
+        }
       } catch (e) {
-        console.error("Seed error:", e.message);
+        console.error("Route loading error:", e.message);
       }
-    } else {
-      console.warn("MONGODB_URI not set, skipping DB connection");
-    }
-
-    // Load routes AFTER DB is ready
-    app.use("/api/auth", require("./routes/auth"));
-    app.use("/api/packages", require("./routes/packages"));
-    app.use("/api/bookings", require("./routes/bookings"));
-    app.use("/api/inquiries", require("./routes/inquiries"));
-    app.use("/api/careers", require("./routes/careers"));
-    app.use("/api/testimonials", require("./routes/testimonials"));
-    app.use("/api/blog", require("./routes/blog"));
-    app.use("/api/gallery", require("./routes/gallery"));
-    app.use("/api/users", require("./routes/users"));
-
-    // 404
-    app.use((req, res) => res.status(404).json({ message: "Route not found" }));
-    app.use((err, req, res, next) => { console.error(err); res.status(500).json({ message: err.message }); });
-
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => console.log("Multifly API running on port", PORT));
-  } catch (error) {
-    console.error("Server start error:", error.message);
-    process.exit(1);
+    }).catch(err => {
+      console.error("MongoDB connection failed:", err.message);
+      console.log("Server running without DB — health check still works");
+    });
+  } else {
+    console.warn("MONGODB_URI not set");
   }
-};
+});
 
-startServer();
 module.exports = app;
