@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
-const JWT_SECRET = process.env.JWT_SECRET || "multifly-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || "multifly_jwt_secret_2026_xyz789abc";
 
 app.post("/api/auth/register", async (req, res) => {
   try {
@@ -60,7 +60,45 @@ app.get("/api/auth/me", async (req, res) => {
   } catch (e) { res.status(401).json({ success: false, message: "Invalid token" }); }
 });
 
-// ============ PACKAGES ROUTES (inline) ============
+// ============ OTP AUTH ROUTES ============
+const otps = {}; // In-memory OTP store (phone -> {otp, expiry})
+
+app.post("/api/auth/send-otp", async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone || phone.length !== 10) {
+      return res.status(400).json({ success: false, message: "Valid 10-digit phone number required" });
+    }
+    // Generate OTP (demo: always 000000)
+    const otp = "000000";
+    otps[phone] = { otp, expiry: Date.now() + 5 * 60 * 1000 }; // 5 min expiry
+    console.log(`OTP for ${phone}: ${otp}`);
+    res.json({ success: true, message: "OTP sent successfully", demo: otp });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+app.post("/api/auth/verify-otp", async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ success: false, message: "Phone and OTP required" });
+    }
+    const stored = otps[phone];
+    if (!stored) return res.status(400).json({ success: false, message: "OTP not sent. Request new OTP." });
+    if (Date.now() > stored.expiry) {
+      delete otps[phone];
+      return res.status(400).json({ success: false, message: "OTP expired. Request new OTP." });
+    }
+    if (stored.otp !== otp) return res.status(401).json({ success: false, message: "Invalid OTP" });
+    delete otps[phone]; // OTP used
+    let user = await User.findOne({ phone });
+    if (!user) {
+      user = await User.create({ name: "Admin", phone, email: `${phone}@multifly.com`, role: "admin" });
+    }
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+    res.json({ success: true, data: { user: { _id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role }, token } });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
 const Package = require("./models/Package");
 
 app.get("/api/packages", async (req, res) => {
